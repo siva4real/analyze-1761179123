@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Result Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Lightweight viewer for result.json produced by CI and published via GitHub Pages. Supports ?url=... to load any JSON.">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #22d3ee;
+      --accent-2: #34d399;
+      --danger: #f43f5e;
+      --warn: #f59e0b;
+      --border: #1f2937;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 80% -200px, rgba(34,211,238,.07), transparent 60%),
+                  radial-gradient(1000px 600px at -10% 120%, rgba(52,211,153,.06), transparent 60%),
+                  var(--bg);
+      font: 16px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    header {
+      padding: 20px clamp(16px, 4vw, 40px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(10px);
+      background: linear-gradient(180deg, rgba(15,23,42,.8), rgba(15,23,42,.5));
+      z-index: 5;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 30px rgba(34,211,238,.25);
+    }
+
+    .title {
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+
+    main {
+      padding: 20px clamp(16px, 4vw, 40px) 40px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel {
+      background: rgba(17,24,39,.6);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+
+    .controls {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .input {
+      flex: 1 1 480px;
+      min-width: 240px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .input input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .input .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: #0b1220;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform .04s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover { background: #0f172a; border-color: #2b3648; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary {
+      background: linear-gradient(180deg, rgba(34,211,238,.18), rgba(34,211,238,.08));
+      border-color: rgba(34,211,238,.35);
+    }
+    .btn.success {
+      background: linear-gradient(180deg, rgba(52,211,153,.18), rgba(52,211,153,.08));
+      border-color: rgba(52,211,153,.35);
+    }
+    .btn.warn {
+      background: linear-gradient(180deg, rgba(245,158,11,.18), rgba(245,158,11,.08));
+      border-color: rgba(245,158,11,.35);
+    }
+
+    .meta {
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #0b1220;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .content {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .tabbar {
+      display: flex;
+      gap: 4px;
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      background: #0b1220;
+      position: sticky;
+      top: 66px;
+      z-index: 4;
+    }
+    .tab {
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: transparent;
+      font-weight: 600;
+    }
+    .tab.active {
+      color: var(--text);
+      background: #111827;
+    }
+
+    .viewer {
+      padding: 12px;
+    }
+
+    pre.json {
+      margin: 0;
+      padding: 16px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: auto;
+      max-height: 70vh;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.4;
+      tab-size: 2;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    thead th {
+      position: sticky; top: calc(66px + 49px);
+      background: #0f172a;
+      color: var(--text);
+      text-align: left;
+      font-size: 12px;
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px;
+      font-size: 13px;
+      vertical-align: top;
+    }
+    tbody tr:hover td {
+      background: rgba(34,211,238,.03);
+    }
+    .scroll {
+      overflow: auto;
+      max-height: 70vh;
+      border-radius: 8px;
+    }
+
+    .empty, .error {
+      padding: 18px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: rgba(255,255,255,.02);
+      color: var(--muted);
+    }
+    .error { border-color: rgba(244,63,94,.5); color: #fecdd3; background: rgba(244,63,94,.06); }
+
+    footer {
+      padding: 20px clamp(16px, 4vw, 40px) 40px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    kbd {
+      font-family: var(--mono);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      background: #0b1220;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+
+    .sr-only {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0);
+      white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <div class="title">Result Viewer</div>
+        <div style="font-size:13px; color:var(--muted)">Displays result.json generated by CI. Use ?url=... to load from a custom URL.</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel controls" aria-label="Controls">
+      <div class="row">
+        <div class="input" title="Paste a JSON URL or leave empty to use ./result.json">
+          <span class="hint">URL</span>
+          <input id="url" type="url" placeholder="https://your-domain/result.json (default: ./result.json)">
+        </div>
+        <button id="load" class="btn primary" type="button">Load</button>
+        <button id="download" class="btn success" type="button" title="Download the currently loaded JSON">Download</button>
+        <button id="copyLink" class="btn" type="button" title="Copy a shareable link with ?url=...">Copy Link</button>
+        <button id="reset" class="btn warn" type="button" title="Reset to default ./result.json">Reset</button>
+      </div>
+      <div class="row meta">
+        <span class="badge" id="status">Idle</span>
+        <span class="badge" id="info-rows" style="display:none"></span>
+        <span class="badge" id="info-keys" style="display:none"></span>
+        <span class="badge" id="source"></span>
+        <span class="badge">Tip: press <kbd>Enter</kbd> to load</span>
+      </div>
+    </section>
+
+    <section class="panel content">
+      <div class="tabbar" role="tablist" aria-label="Views">
+        <button class="tab active" id="tab-table" role="tab" aria-selected="true">Table</button>
+        <button class="tab" id="tab-json" role="tab" aria-selected="false">Raw JSON</button>
+      </div>
+      <div class="viewer" id="table-view" role="tabpanel" aria-labelledby="tab-table"></div>
+      <div class="viewer" id="json-view" role="tabpanel" aria-labelledby="tab-json" hidden></div>
+    </section>
+  </main>
+
+  <footer>
+    Generated by CI: ruff → python execute.py > result.json → GitHub Pages. This page is static and has no external dependencies.
+  </footer>
+
+  <script>
+    (function () {
+      const $ = (sel) => document.querySelector(sel);
+      const statusEl = $('#status');
+      const sourceEl = $('#source');
+      const rowsEl = $('#info-rows');
+      const keysEl = $('#info-keys');
+      const urlInput = $('#url');
+      const loadBtn = $('#load');
+      const resetBtn = $('#reset');
+      const copyLinkBtn = $('#copyLink');
+      const downloadBtn = $('#download');
+      const tableTab = $('#tab-table');
+      const jsonTab = $('#tab-json');
+      const tableView = $('#table-view');
+      const jsonView = $('#json-view');
+
+      let currentData = null;
+      let currentUrl = null;
+
+      function setStatus(text, tone) {
+        statusEl.textContent = text;
+        const cls = { ok: 'success', warn: 'warn', err: 'danger', none: '' }[tone || 'none'];
+        statusEl.className = 'badge' + (cls ? ' ' + cls : '');
+      }
+
+      function parseQuery() {
+        const u = new URL(window.location.href);
+        const val = u.searchParams.get('url');
+        return val && val.trim() ? val.trim() : null;
+      }
+
+      function setQuery(url) {
+        const u = new URL(window.location.href);
+        if (url) {
+          u.searchParams.set('url', url);
+        } else {
+          u.searchParams.delete('url');
+        }
+        history.replaceState(null, '', u.toString());
+      }
+
+      function human(x) {
+        return Intl.NumberFormat().format(x);
+      }
+
+      function unionKeys(arr) {
+        const s = new Set();
+        for (const row of arr) {
+          if (row && typeof row === 'object' && !Array.isArray(row)) {
+            for (const k of Object.keys(row)) s.add(k);
+          }
+        }
+        return [...s].sort((a,b) => a.localeCompare(b));
+      }
+
+      function renderJSON(data) {
+        const pre = document.createElement('pre');
+        pre.className = 'json';
+        pre.textContent = JSON.stringify(data, null, 2);
+        jsonView.innerHTML = '';
+        jsonView.appendChild(pre);
+      }
+
+      function asText(val) {
+        if (val === null) return 'null';
+        if (val === undefined) return '';
+        if (typeof val === 'number') {
+          return Number.isFinite(val) ? val.toString() : '';
+        }
+        if (typeof val === 'boolean') return val ? 'true' : 'false';
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val);
+      }
+
+      function renderTable(data) {
+        tableView.innerHTML = '';
+        if (Array.isArray(data)) {
+          if (data.length === 0) {
+            const div = document.createElement('div');
+            div.className = 'empty';
+            div.textContent = 'Empty array.';
+            tableView.appendChild(div);
+            return;
+          }
+          const keys = unionKeys(data);
+          const wrap = document.createElement('div');
+          wrap.className = 'scroll';
+          const table = document.createElement('table');
+          const thead = document.createElement('thead');
+          const trh = document.createElement('tr');
+          for (const k of keys) {
+            const th = document.createElement('th');
+            th.textContent = k;
+            trh.appendChild(th);
+          }
+          thead.appendChild(trh);
+          table.appendChild(thead);
+          const tbody = document.createElement('tbody');
+          for (const row of data) {
+            const tr = document.createElement('tr');
+            for (const k of keys) {
+              const td = document.createElement('td');
+              td.textContent = asText(row ? row[k] : undefined);
+              tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+          wrap.appendChild(table);
+          tableView.appendChild(wrap);
+          rowsEl.style.display = '';
+          rowsEl.textContent = `${human(data.length)} rows`;
+          keysEl.style.display = '';
+          keysEl.textContent = `${human(keys.length)} columns`;
+        } else if (data && typeof data === 'object') {
+          // Try to find a top-level array property
+          const arrKey = Object.keys(data).find(k => Array.isArray(data[k]));
+          if (arrKey) {
+            const header = document.createElement('div');
+            header.className = 'empty';
+            header.textContent = `Rendering array at data["${arrKey}"]`;
+            tableView.appendChild(header);
+            renderTable(data[arrKey]);
+          } else {
+            const div = document.createElement('div');
+            div.className = 'empty';
+            div.textContent = 'JSON is an object without an array to tabulate. See Raw JSON.';
+            tableView.appendChild(div);
+          }
+        } else {
+          const div = document.createElement('div');
+          div.className = 'empty';
+          div.textContent = 'Unsupported JSON shape. See Raw JSON.';
+          tableView.appendChild(div);
+        }
+      }
+
+      function switchTab(which) {
+        if (which === 'table') {
+          tableTab.classList.add('active');
+          jsonTab.classList.remove('active');
+          tableView.hidden = false;
+          jsonView.hidden = true;
+        } else {
+          jsonTab.classList.add('active');
+          tableTab.classList.remove('active');
+          jsonView.hidden = false;
+          tableView.hidden = true;
+        }
+      }
+
+      async function fetchJSON(url) {
+        setStatus('Loading…', 'warn');
+        sourceEl.textContent = `Source: ${url}`;
+        rowsEl.style.display = 'none';
+        keysEl.style.display = 'none';
+        try {
+          const resp = await fetch(url, { cache: 'no-store' });
+          if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+          }
+          const data = await resp.json();
+          currentData = data;
+          currentUrl = url;
+          renderTable(data);
+          renderJSON(data);
+          setStatus('Loaded', 'ok');
+        } catch (err) {
+          currentData = null;
+          const div = document.createElement('div');
+          div.className = 'error';
+          div.textContent = `Failed to load JSON (${err && err.message ? err.message : err}). If this is a cross-origin URL, ensure it allows CORS.`;
+          tableView.innerHTML = '';
+          jsonView.innerHTML = '';
+          tableView.appendChild(div);
+          setStatus('Error', 'err');
+          console.error(err);
+        }
+      }
+
+      function defaultResultUrl() {
+        // Relative result.json in the same Pages site
+        return './result.json';
+      }
+
+      function initFromQuery() {
+        const q = parseQuery();
+        if (q) {
+          urlInput.value = q;
+          fetchJSON(q);
+        } else {
+          urlInput.value = '';
+          fetchJSON(defaultResultUrl());
+        }
+      }
+
+      loadBtn.addEventListener('click', () => {
+        const val = urlInput.value.trim();
+        setQuery(val || null);
+        fetchJSON(val || defaultResultUrl());
+      });
+
+      urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          loadBtn.click();
+        }
+      });
+
+      resetBtn.addEventListener('click', () => {
+        urlInput.value = '';
+        setQuery(null);
+        fetchJSON(defaultResultUrl());
+      });
+
+      copyLinkBtn.addEventListener('click', async () => {
+        const base = new URL(window.location.href);
+        const target = urlInput.value.trim() || defaultResultUrl();
+        base.searchParams.set('url', target);
+        try {
+          await navigator.clipboard.writeText(base.toString());
+          setStatus('Link copied', 'ok');
+          setTimeout(() => setStatus('Loaded', 'ok'), 1200);
+        } catch {
+          setStatus('Copy failed', 'err');
+        }
+      });
+
+      downloadBtn.addEventListener('click', () => {
+        if (!currentData) return;
+        const blob = new Blob([JSON.stringify(currentData, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        // Prefer original filename if it ends with .json
+        try {
+          const u = new URL(currentUrl, window.location.href);
+          const name = (u.pathname.split('/').pop() || '').trim();
+          a.download = name && name.endsWith('.json') ? name : 'result.json';
+        } catch {
+          a.download = 'result.json';
+        }
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      });
+
+      tableTab.addEventListener('click', () => switchTab('table'));
+      jsonTab.addEventListener('click', () => switchTab('json'));
+
+      // Initial load
+      initFromQuery();
+    })();
+  </script>
+</body>
+</html>
